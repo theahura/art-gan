@@ -6,25 +6,29 @@ Implementation of Cycle GAN for photo-to-image-style transfer.
 
 import os
 
+from absl import app
 from absl import flags
 import numpy as np
 import tensorflow as tf
+from models.research.slim.nets import cyclegan
+from models.research.slim.nets import pix2pix
 
 # Filepaths.
 flags.DEFINE_string('data_dir', 'datasets/monet2photo', 'Data path.')
 flags.DEFINE_string('model_dir', 'ckpts', 'model path.')
 
 # Model hyperparameters.
-flags.DEFINE_float('gen_lr', 0.0002)
-flags.DEFINE_float('dis_lr', 0.0001)
+flags.DEFINE_float('gen_lr', 0.0002, 'Generator learning rate.')
+flags.DEFINE_float('dis_lr', 0.0001, 'Discriminator learning rate.')
 
 # Training parameters.
-flags.DEFINE_integer('steps', 50000)
-flags.DEFINE_integer('batch', 64)
+flags.DEFINE_integer('steps', 50000, 'Number of steps to run.')
+flags.DEFINE_integer('batch', 64, 'Batch size for images.')
 
 SEED = 123
 FLAGS = flags.FLAGS
 tfgan = tf.contrib.gan
+layers = tf.layers
 
 
 # DATA.
@@ -67,12 +71,27 @@ def get_dataset(data_dir, batch, seed):
 
 
 # MODEL.
-def generator(net):
-    pass
+def generator(input_images):
+    input_images.shape.assert_has_rank(4)
+    input_size = input_images.shape.as_list()
+    channels = input_size[-1]
+    if channels is None:
+        raise ValueError(
+            'Last dimension shape must be known but is None: %s' % input_size)
+    with tf.contrib.framework.arg_scope(cyclegan.cyclegan_arg_scope()):
+        output_images, _ = cyclegan.cyclegan_generator_resnet(input_images,
+                                                              num_outputs=channels)
+    return output_images
 
 
-def discriminator(net):
-    pass
+def discriminator(image_batch, condition):
+    with tf.contrib.framework.arg_scope(pix2pix.pix2pix_arg_scope()):
+        logits_4d, _ = pix2pix.pix2pix_discriminator(
+            image_batch, num_filters=[64, 128, 256, 512])
+        logits_4d.shape.assert_has_rank(4)
+        # Output of logits is 4D. Reshape to 2D, for TFGAN.
+    logits_2d = tf.contrib.layers.flatten(logits_4d)
+    return logits_2d
 
 
 def cyclegan_model(input_set, ground_truth):
@@ -83,13 +102,13 @@ def cyclegan_model(input_set, ground_truth):
         data_y=ground_truth
     )
 
-    tfgan.eval.add_cyclegan_image_summaries(cyclegan_model)
+    tfgan.eval.add_cyclegan_image_summaries(model)
 
     return model
 
 
 # TRAIN.
-def main():
+def main(_):
     tf.set_random_seed(SEED)
 
     x, y = get_dataset(FLAGS.data_dir, FLAGS.batch, SEED)
@@ -123,4 +142,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    app.run(main)
