@@ -38,7 +38,7 @@ def _to_patch(im):
     target = tf.minimum(shape[0], shape[1])
     im = tf.image.resize_image_with_crop_or_pad(im, target, target)
     im = tf.expand_dims(im, axis=0)
-    im = tf.image.resize_images(im, [128, 128])
+    im = tf.image.resize_images(im, [64, 64])
     im = tf.squeeze(im, axis=0)
 
     im = tf.tile(im, [1, 1, tf.maximum(1, 4 - tf.shape(im)[2])])

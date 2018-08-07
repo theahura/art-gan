@@ -1,3 +1,6 @@
+mkdir datasets
+mkdir ckpts
+
 FILE=$1
 
 if [[ $FILE != "ae_photos" && $FILE != "apple2orange" && $FILE != "summer2winter_yosemite" &&  $FILE != "horse2zebra" && $FILE != "monet2photo" && $FILE != "cezanne2photo" && $FILE != "ukiyoe2photo" && $FILE != "vangogh2photo" && $FILE != "maps" && $FILE != "cityscapes" && $FILE != "facades" && $FILE != "iphone2dslr_flower" && $FILE != "ae_photos" ]]; then
@@ -12,3 +15,10 @@ wget -N $URL -O $ZIP_FILE
 mkdir $TARGET_DIR
 unzip $ZIP_FILE -d ./datasets/
 rm $ZIP_FILE
+
+git clone "git@github.com:tensorflow/models.git"
+
+touch "models/__init__.py"
+touch "models/research/__init__.py"
+touch "models/research/slim/__init__.py"
+touch "models/research/slim/nets/__init__.py"
