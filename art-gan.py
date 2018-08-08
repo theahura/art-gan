@@ -5,7 +5,7 @@ Implementation of Cycle GAN for photo-to-image-style transfer.
 
 TODO:
   Utilize pretrained imagenet models to avoid training whole thing.
-  """
+"""
 
 import os
 
@@ -40,11 +40,11 @@ def _to_patch(im):
   target = tf.minimum(shape[0], shape[1])
   im = tf.image.resize_image_with_crop_or_pad(im, target, target)
   im = tf.expand_dims(im, axis=0)
-  im = tf.image.resize_images(im, [32, 32])
+  im = tf.image.resize_images(im, [64, 64])
   im = tf.squeeze(im, axis=0)
 
   im = tf.tile(im, [1, 1, tf.maximum(1, 4 - tf.shape(im)[2])])
-  im = tf.slice(im, [0, 0, 0], [32, 32, 3])
+  im = tf.slice(im, [0, 0, 0], [64, 64, 3])
   return im
 
 
@@ -59,7 +59,7 @@ def _get_single_dataset(data_dir, batch, seed):
   files = tf.data.Dataset.list_files(data_dir + '/*').shuffle(100000000, seed=seed)
   images = files.map(_open_image)
   images = images.apply(tf.contrib.data.batch_and_drop_remainder(batch))
-  images = images.prefetch(1).repeat()
+  images = images.prefetch(3).repeat()
   iterator = images.make_one_shot_iterator()
   return iterator.get_next()
 
@@ -159,7 +159,7 @@ def main(_):
     get_hooks_fn=tfgan.get_sequential_train_hooks(train_steps),
     hooks=[
       tf.train.StopAtStepHook(last_step=FLAGS.steps),
-      tf.train.LoggingTensorHook([status_message], every_n_iter=1)
+      tf.train.LoggingTensorHook([status_message], every_n_iter=100)
     ],
   )
 
