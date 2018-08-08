@@ -35,22 +35,14 @@ layers = tf.layers
 
 
 # DATA.
-def _to_patch(im):
+def _open_image(fp):
+  im = tf.image.decode_jpeg(tf.read_file(fp), channels=3)
   shape = tf.shape(im)
   target = tf.minimum(shape[0], shape[1])
   im = tf.image.resize_image_with_crop_or_pad(im, target, target)
   im = tf.expand_dims(im, axis=0)
-  im = tf.image.resize_images(im, [64, 64])
+  im = tf.image.resize_images(im, [128, 128])
   im = tf.squeeze(im, axis=0)
-
-  im = tf.tile(im, [1, 1, tf.maximum(1, 4 - tf.shape(im)[2])])
-  im = tf.slice(im, [0, 0, 0], [64, 64, 3])
-  return im
-
-
-def _open_image(fp):
-  im = tf.image.decode_jpeg(tf.read_file(fp), channels=3)
-  im = _to_patch(im)
   im = (tf.to_float(im) - 127.5) / 127.5
   return im
 
