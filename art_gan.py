@@ -11,6 +11,7 @@ import os
 
 from absl import flags
 import numpy as np
+from PIL import Image
 import tensorflow as tf
 from models.research.slim.nets import cyclegan
 from models.research.slim.nets import pix2pix
@@ -19,19 +20,29 @@ import IPython
 # Filepaths.
 flags.DEFINE_string('data_dir', 'datasets/monet2photo', 'Data path.')
 flags.DEFINE_string('model_dir', 'ckpts', 'model path.')
+flags.DEFINE_string('output_dir', './outputs', 'output path.')
+flags.DEFINE_string('input_file', './tomonet.jpg', 'obvious.')
 
 # Model hyperparameters.
 flags.DEFINE_float('gen_lr', 0.0002, 'Generator learning rate.')
 flags.DEFINE_float('dis_lr', 0.0001, 'Discriminator learning rate.')
 
 # Training parameters.
-flags.DEFINE_integer('steps', 50000, 'Number of steps to run.')
+flags.DEFINE_integer('steps', 500000, 'Number of steps to run.')
 flags.DEFINE_integer('batch', 1, 'Batch size for images.')
+flags.DEFINE_boolean('is_test', False, 'True for testing, false for training.')
 
 SEED = 123
 FLAGS = flags.FLAGS
 tfgan = tf.contrib.gan
 layers = tf.layers
+
+
+# OTHER.
+def _make_dir_if_not_exists(dir_path):
+  """Make a directory if it does not exist."""
+  if not tf.gfile.Exists(dir_path):
+    tf.gfile.MakeDirs(dir_path)
 
 
 # DATA.
@@ -95,10 +106,14 @@ def cyclegan_model(input_set, ground_truth):
     data_x=input_set,
     data_y=ground_truth
   )
-
   tfgan.eval.add_cyclegan_image_summaries(model)
-
   return model
+
+
+def _make_dir_if_not_exists(dir_path):
+  """Make a directory if it does not exist."""
+  if not tf.gfile.Exists(dir_path):
+    tf.gfile.MakeDirs(dir_path)
 
 
 def _get_lr(base_lr):
@@ -113,22 +128,15 @@ def _get_lr(base_lr):
   return tf.cond(global_step < lr_constant_steps, lambda: base_lr, _lr_decay)
 
 
-# TRAIN.
-def main(_):
-  tf.set_random_seed(SEED)
-
-  x, y = get_dataset(FLAGS.data_dir, FLAGS.batch, SEED)
-
-  model = cyclegan_model(x, y)
-
+def train(model, gen_lr, dis_lr, model_dir, steps):
   # Possibly make this wgan. Has separate params for gen and discrim loss.
   loss = tfgan.cyclegan_loss(
     model,
     tensor_pool_fn=tfgan.features.tensor_pool
   )
 
-  gen_lr = _get_lr(FLAGS.gen_lr)
-  dis_lr = _get_lr(FLAGS.dis_lr)
+  gen_lr = _get_lr(gen_lr)
+  dis_lr = _get_lr(dis_lr)
 
   train_ops = tfgan.gan_train_ops(
     model,
@@ -147,14 +155,55 @@ def main(_):
       ], name='status_message')
   tfgan.gan_train(
     train_ops,
-    FLAGS.model_dir,
+    model_dir,
     get_hooks_fn=tfgan.get_sequential_train_hooks(train_steps),
     hooks=[
-      tf.train.StopAtStepHook(last_step=FLAGS.steps),
+      tf.train.StopAtStepHook(last_step=steps),
       tf.train.LoggingTensorHook([status_message], every_n_iter=100)
     ],
   )
 
+
+def test(model_dir, output_dir, input_files):
+
+  input_img_fp = tf.placeholder(tf.string)
+  # Expand HWC to NHWC
+  images_x = tf.expand_dims(_open_image(input_img_fp), 0)
+
+  with tf.variable_scope('ModelX2Y'):
+    with tf.variable_scope('Generator'):
+      generated_x2y = generator(images_x)
+
+  with tf.variable_scope('ModelY2X'):
+    with tf.variable_scope('Generator'):
+      generated_y2x = generator(images_x)
+
+  sess = tf.Session()
+  saver = tf.train.Saver()
+  ckpt = tf.train.get_checkpoint_state(model_dir)
+  if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
+      saver.restore(sess, ckpt.model_checkpoint_path)
+
+  if output_dir:
+    _make_dir_if_not_exists(output_dir)
+
+  for file_path in tf.gfile.Glob(input_files):
+	output_np = sess.run(generated_x2y, feed_dict={input_img_fp: file_path})
+	image_np = np.uint8(np.squeeze(output_np, axis=0) * 127.5 + 127.5)
+	output_path = os.path.join(output_dir, os.path.basename(file_path))
+	Image.fromarray(image_np).save(output_path)
+
+
+def main(_):
+  tf.set_random_seed(SEED)
+
+  x, y = get_dataset(FLAGS.data_dir, FLAGS.batch, SEED)
+
+  if FLAGS.is_test:
+    test(FLAGS.model_dir, FLAGS.output_dir, FLAGS.input_file)
+  else:
+    model = cyclegan_model(x, y)
+    train(model, FLAGS.gen_lr, FLAGS.dis_lr, FLAGS.model_dir, FLAGS.steps)
   IPython.embed()
 
 
